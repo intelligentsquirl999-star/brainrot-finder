@@ -1,23 +1,80 @@
-# main.py — ULTRA-MINIMAL TEST VERSION (will deploy 100%)
 import os
+import threading
+import time
+import random
+import requests
 from flask import Flask, jsonify
 
 app = Flask(__name__)
 
+PLACE_ID = 109983668079237
+MIN_INCOME = 10000000
+
+best = {
+    "placeId": PLACE_ID,
+    "jobId": None,
+    "income": 0,
+    "players": 0,
+    "found_at": None
+}
+
+def load_cookies():
+    cookies = []
+    i = 1
+    while True:
+        c = os.environ.get(f"COOKIE_{i}")
+        if not c:
+            break
+        cookies.append(c.strip())
+        i += 1
+    print(f"Loaded {len(cookies)} cookies")
+    return cookies
+
+COOKIES = load_cookies()
+
+def scanner(cookie):
+    s = requests.Session()
+    s.cookies[".ROBLOSECURITY"] = cookie
+    s.headers["User-Agent"] = "Roblox/WinInet"
+
+    while True:
+        try:
+            cursor = ""
+            while cursor is not None:
+                params = {"sortOrder": "Asc", "limit": 100}
+                if cursor: params["cursor"] = cursor
+                r = s.get(f"https://games.roblox.com/v1/games/{PLACE_ID}/servers/Public", params=params, timeout=15)
+                data = r.json()
+                for srv in random.sample(data.get("data", []), len(data.get("data", []))):
+                    p = srv["playing"]
+                    if 4 <= p <= 12:
+                        est = p * 2_200_000
+                        if est >= MIN_INCOME and est > best["income"]:
+                            best.update({
+                                "jobId": srv["id"],
+                                "income": est,
+                                "players": p,
+                                "found_at": time.strftime("%H:%M:%S")
+                            })
+                            print(f"NEW BEST → {est//1000000}M | Players: {p}")
+                cursor = data.get("nextPageCursor")
+                time.sleep(1)
+            time.sleep(random.uniform(15, 25))
+        except Exception as e:
+            print("Scanner error:", e)
+            time.sleep(20)
+
 @app.route("/")
 def home():
-    return "Scanner is ALIVE – cookies loaded: " + str(bool(os.environ.get("COOKIE_1")))
+    return "Scanner alive – /latest for data"
 
 @app.route("/latest")
 def latest():
-    return jsonify({
-        "placeId": 109983668079237,
-        "jobId": None,
-        "income": 0,
-        "players": 0,
-        "found_at": None
-    })
+    return jsonify(best)
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
+    if COOKIES:
+        for i, c in enumerate(COOKIES):
+            threading.Thread(target=scanner, args=(c,), daemon=True).start()
+            time.sleep(2)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
