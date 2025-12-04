@@ -1,14 +1,11 @@
-import os
-import threading
-import time
-import random
-import requests
+import os, threading, time, random, requests
 from flask import Flask, jsonify
 
 app = Flask(__name__)
 PLACE_ID = 109983668079237
-MIN_INCOME = 8000000  # 8M+ = realistic and fast
 
+# ←←← THIS IS THE FIX
+best_lock = threading.Lock()
 best = {
     "placeId": PLACE_ID,
     "jobId": None,
@@ -46,7 +43,7 @@ def scanner(cookie):
                           params=params, timeout=15)
                 
                 if r.status_code == 429:
-                    print("429 hit → sleeping 45s")
+                    print("429 → sleeping 45s")
                     time.sleep(random.uniform(45, 70))
                     break
                 if r.status_code != 200:
@@ -60,35 +57,33 @@ def scanner(cookie):
                     p = srv["playing"]
                     if 4 <= p <= 14:
                         income = p * 2_200_000
-                        if income > best["income"]:
-                            best.update({
-                                "jobId": srv["id"],
-                                "income": income,
-                                "players": p,
-                                "found_at": time.strftime("%H:%M:%S")
-                            })
-                            print(f"★★★ JACKPOT → {income//1000000}M | {p} players | {srv['id']}")
+                        with best_lock:                                 # ←←← THREAD-SAFE UPDATE
+                            if income > best["income"]:
+                                best.update({
+                                    "jobId": srv["id"],
+                                    "income": income,
+                                    "players": p,
+                                    "found_at": time.strftime("%H:%M:%S")
+                                })
+                                print(f"★★★ JACKPOT → {income//1000000}M | {p} players | {srv['id']}")
                         good += 1
                 print(f"Page scanned → {len(servers)} servers | {good} in 4-14 range")
                 cursor = data.get("nextPageCursor")
-                time.sleep(1.5)                      # Perfect speed = zero 429s
-                
-            time.sleep(random.uniform(22, 38))
+                time.sleep(1.6)
+            time.sleep(random.uniform(25, 40))
         except Exception as e:
             print("Error:", e)
             time.sleep(15)
 
-@app.route("/")
-def home():
-    return "scanner running"
-
+@app.route("/"); return "scanner running"
 @app.route("/latest")
 def latest():
-    return jsonify(best)
+    with best_lock:                                 # ←←← THREAD-SAFE READ
+        return jsonify(best)
 
 if __name__ == "__main__":
-    print(f"STARTING {len(COOKIES)} SCANNER THREADS — FINAL VERSION")
+    print(f"STARTING {len(COOKIES)} SCANNER THREADS — FINAL LOCKED VERSION")
     for c in COOKIES:
         threading.Thread(target=scanner, args=(c,), daemon=True).start()
-        time.sleep(1.8)        # gentle startup
+        time.sleep(1.8)
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), use_reloader=False)
