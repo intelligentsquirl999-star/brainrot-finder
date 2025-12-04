@@ -1,10 +1,14 @@
-import os, threading, time, random, requests
+import os
+import threading
+import time
+import random
+import requests
 from flask import Flask, jsonify
 
 app = Flask(__name__)
 PLACE_ID = 109983668079237
 
-# ←←← THIS IS THE FIX
+# Thread-safe best server storage
 best_lock = threading.Lock()
 best = {
     "placeId": PLACE_ID,
@@ -19,7 +23,8 @@ def load_cookies():
     i = 1
     while True:
         c = os.environ.get(f"COOKIE_{i}")
-        if not c: break
+        if not c:
+            break
         cookies.append(c.strip())
         i += 1
     print(f"LOADED {len(cookies)} COOKIES → READY")
@@ -37,17 +42,18 @@ def scanner(cookie):
             cursor = ""
             while cursor is not None:
                 params = {"sortOrder": "Asc", "limit": 100}
-                if cursor: params["cursor"] = cursor
+                if cursor:
+                    params["cursor"] = cursor
                 
                 r = s.get(f"https://games.roblox.com/v1/games/{PLACE_ID}/servers/Public",
                           params=params, timeout=15)
                 
                 if r.status_code == 429:
-                    print("429 → sleeping 45s")
+                    print("429 → sleeping 45-70s")
                     time.sleep(random.uniform(45, 70))
                     break
                 if r.status_code != 200:
-                    time.sleep(10)
+                    time.sleep(12)
                     break
                     
                 data = r.json()
@@ -57,7 +63,7 @@ def scanner(cookie):
                     p = srv["playing"]
                     if 4 <= p <= 14:
                         income = p * 2_200_000
-                        with best_lock:                                 # ←←← THREAD-SAFE UPDATE
+                        with best_lock:
                             if income > best["income"]:
                                 best.update({
                                     "jobId": srv["id"],
@@ -67,22 +73,25 @@ def scanner(cookie):
                                 })
                                 print(f"★★★ JACKPOT → {income//1000000}M | {p} players | {srv['id']}")
                         good += 1
-                print(f"Page scanned → {len(servers)} servers | {good} in 4-14 range")
+                print(f"Page scanned → {len(servers)} servers | {good} good")
                 cursor = data.get("nextPageCursor")
-                time.sleep(1.6)
-            time.sleep(random.uniform(25, 40))
+                time.sleep(1.7)
+            time.sleep(random.uniform(25, 42))
         except Exception as e:
             print("Error:", e)
             time.sleep(15)
 
-@app.route("/"); return "scanner running"
+@app.route("/")
+def home():
+    return "scanner running"
+
 @app.route("/latest")
 def latest():
-    with best_lock:                                 # ←←← THREAD-SAFE READ
+    with best_lock:
         return jsonify(best)
 
 if __name__ == "__main__":
-    print(f"STARTING {len(COOKIES)} SCANNER THREADS — FINAL LOCKED VERSION")
+    print(f"STARTING {len(COOKIES)} SCANNER THREADS — LOCKED & FINAL")
     for c in COOKIES:
         threading.Thread(target=scanner, args=(c,), daemon=True).start()
         time.sleep(1.8)
