@@ -18,7 +18,7 @@ def load_cookies():
         if not cookie: break
         c.append(cookie)
         i += 1
-    print(f"LOADED {len(c)} ALTS – GOD MODE ON")
+    print(f"LOADED {len(c)} ALTS – MAX 8P OPTIMIZED")
     return c
 
 COOKIES = load_cookies()
@@ -45,19 +45,20 @@ def scanner(cookie):
                     break
 
                 data = r.json()
-                good = sum(1 for x in data.get("data", []) if 13 <= x["playing"] <= 15)
-                print(f"PAGE {page} – {len(data.get('data', []))} servers – {good} in 13-15 range")
+                servers = data.get("data", [])
+                good = sum(1 for x in servers if 4 <= x["playing"] <= 7)
+                print(f"PAGE {page} – {len(servers)} servers – {good} in 4-7 range")
 
-                for srv in data.get("data", []):
+                for srv in servers:
                     p = srv["playing"]
-                    if 13 <= p <= 15:
+                    if 4 <= p <= 7:  # OPTIMAL FOR MAX 8P – 8.8M to 15.4M income
                         income = p * 2200000
                         with best_lock:
                             if income > best["income"]:
                                 joining = srv["id"]
                                 best.update({"jobId": joining, "income": income, "players": p, "found_at": time.strftime("%H:%M:%S")})
-                                print(f"GOD SERVER → {income//1000000}M | {p}p | {joining}")
-                                threading.Timer(18, lambda: best.update({"jobId": None, "income": 0, "players": 0})).start()
+                                print(f"JACKPOT → {income//1000000}M | {p}p | {joining}")
+                                threading.Timer(20, lambda: best.update({"jobId": None, "income": 0, "players": 0})).start()
 
                 cursor = data.get("nextPageCursor")
                 time.sleep(1.1)
@@ -68,7 +69,7 @@ def scanner(cookie):
 
 @app.route("/")
 def home():
-    return "scanner alive – god mode"
+    return "scanner alive – max 8p mode"
 
 @app.route("/latest")
 def latest():
@@ -76,10 +77,8 @@ def latest():
         return jsonify(best)
 
 if __name__ == "__main__":
-    print("BRAINROT GOD SCANNER STARTED – LOGS WILL FLOOD NOW")
+    print("MAX 8P SCANNER LIVE – 4-7P TARGETED")
     for c in COOKIES:
         threading.Thread(target=scanner, args=(c,), daemon=True).start()
         time.sleep(0.7)
-    
-    # FIXED: No threaded=True, no debug, no reloader – Railway-proof
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), debug=False, use_reloader=False)
