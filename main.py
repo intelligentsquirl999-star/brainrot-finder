@@ -1,34 +1,17 @@
-import os
-import threading
-import time
-import random
-import requests
+import os, threading, time, random, requests
 from flask import Flask, jsonify
 
 app = Flask(__name__)
 PLACE_ID = 109983668079237
 
-# Thread-safe best server
 best_lock = threading.Lock()
-best = {
-    "placeId": PLACE_ID,
-    "jobId": None,
-    "income": 0,
-    "players": 0,
-    "found_at": None
-}
+best = {"placeId": PLACE_ID, "jobId": None, "income": 0, "players": 0, "found_at": None}
 
 def load_cookies():
-    cookies = []
-    i = 1
-    while True:
-        c = os.environ.get(f"COOKIE_{i}")
-        if not c:
-            break
-        cookies.append(c.strip())
-        i += 1
-    print(f"LOADED {len(cookies)} COOKIES – AUTO-CLEAR ENABLED")
-    return cookies
+    i,c=1,[]
+    while os.environ.get(f"COOKIE_{i}"): c.append(os.environ.get(f"COOKIE_{i}")); i+=1
+    print(f"LOADED {len(c)} COOKIES – CHAIN MODE")
+    return c
 
 COOKIES = load_cookies()
 
@@ -41,74 +24,44 @@ def scanner(cookie):
         try:
             cursor = ""
             while cursor is not None:
-                params = {"sortOrder": "Asc", "limit": 100}
-                if cursor:
-                    params["cursor"] = cursor
-
-                r = s.get(f"https://games.roblox.com/v1/games/{PLACE_ID}/servers/Public", params=params, timeout=15)
+                r = s.get(f"https://games.roblox.com/v1/games/{PLACE_ID}/servers/Public",
+                          params={"sortOrder":"Asc","limit":100,"cursor":cursor or ""}, timeout=15)
 
                 if r.status_code == 429:
-                    print("429 → sleeping 60–90s")
-                    time.sleep(random.uniform(60, 90))
-                    break
+                    time.sleep(random.uniform(60,90)); break
                 if r.status_code != 200:
-                    time.sleep(10)
-                    break
+                    time.sleep(10); break
 
                 data = r.json()
-                servers = data.get("data", [])
-                good = 0
-
-                for srv in servers:
+                for srv in data.get("data",[]):
                     p = srv["playing"]
-                    if 1 <= p <= 20:  # catches every farmable server right now
+                    if 4 <= p <= 15:                                 # ← REAL farming range again
                         income = p * 2200000
-
                         with best_lock:
                             if income > best["income"]:
-                                joining_id = srv["id"]  # remember this one
+                                joining = srv["id"]
+                                best.update({"jobId":joining, "income":income, "players":p,
+                                            "found_at":time.strftime("%H:%M:%S")})
+                                print(f"★★★ JACKPOT → {income//1000000}M | {p}p | {joining}")
 
-                                best.update({
-                                    "jobId": joining_id,
-                                    "income": income,
-                                    "players": p,
-                                    "found_at": time.strftime("%H:%M:%S")
-                                })
-                                print(f"★★★ NEW JACKPOT → {income//1000000}M | {p}p | {joining_id}")
+                                # Forget this server after 30 seconds so we chain to the next
+                                threading.Timer(30, lambda: best.update({
+                                    "jobId":None,"income":0,"players":0,"found_at":None
+                                }) if best.get("jobId")==joining else None).start()
 
-                                # ←←← FORGET THIS SERVER AFTER 25 SECONDS (you’re already inside)
-                                threading.Timer(25.0, lambda: best.update({
-                                    "jobId": None,
-                                    "income": 0,
-                                    "players": 0,
-                                    "found_at": None
-                                }) if best.get("jobId") == joining_id else None).start()
-
-                        good += 1
-
-                print(f"Scanned → {len(servers)} servers | {good} good")
                 cursor = data.get("nextPageCursor")
-                time.sleep(1.6)
-
-            time.sleep(random.uniform(25, 40))
-
+                time.sleep(1.4)
+            time.sleep(random.uniform(22,38))
         except Exception as e:
-            print("Error:", e)
-            time.sleep(15)
-
-@app.route("/")
-def home():
-    return "scanner running – auto-clear active"
+            print("Error:",e); time.sleep(15)
 
 @app.route("/latest")
 def latest():
-    with best_lock:
-        return jsonify(best)
+    with best_lock: return jsonify(best)
 
 if __name__ == "__main__":
-    print(f"STARTING {len(COOKIES)} THREADS – CHAIN FARMING ENABLED")
+    print(f"STARTING {len(COOKIES)} THREADS – REAL JACKPOT CHAIN")
     for c in COOKIES:
         threading.Thread(target=scanner, args=(c,), daemon=True).start()
-        time.sleep(1.2)
-
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), use_reloader=False)
+        time.sleep(1)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT",8080)))
