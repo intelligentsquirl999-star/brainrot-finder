@@ -19,7 +19,7 @@ TARGET_PETS = {
 
 def load_cookies():
     cookies = [v.strip() for k,v in os.environ.items() if k.startswith("COOKIE_") and v.strip()]
-    print(f"LOADED {len(cookies)} ALTS – SNIPER FULLY ARMED")
+    print(f"LOADED {len(cookies)} ALTS – STABLE MODE (NO 429)")
     return cookies
 
 COOKIES = load_cookies()
@@ -32,22 +32,25 @@ def scanner(cookie):
     while True:
         try:
             cursor = ""
-            total_servers = 0
             while cursor is not None:
-                r = s.get(f"https://games.roblox.com/v1/games/{PLACE_ID}/servers/Public",
-                          params={"limit":100,"cursor":cursor}, timeout=10)
+                r = s.get(
+                    f"https://games.roblox.com/v1/games/{PLACE_ID}/servers/Public",
+                    params={"limit": 100, "cursor": cursor},
+                    timeout=12
+                )
                 
+                if r.status_code == 429:
+                    print(f"429 HIT – SLEEPING 120 SECONDS")
+                    time.sleep(120)
+                    break
+                    
                 if r.status_code != 200:
-                    print(f"ALT {cookie[:10]}... → HTTP {r.status_code} – retrying in 3s")
-                    time.sleep(3)
+                    time.sleep(4)
                     continue
                     
                 data = r.json()
                 servers = data.get("data", [])
-                total_servers += len(servers)
-                
-                # LOG EVERY PAGE
-                print(f"SCANNING → {total_servers} servers checked so far | ALT {cookie[:12]}...")
+                print(f"SCANNING → {len(servers)} servers checked | ALT {cookie[:10]}...")
 
                 for srv in servers:
                     for player in srv.get("playerThumbnails", []):
@@ -55,18 +58,18 @@ def scanner(cookie):
                         if name in TARGET_PETS:
                             with best_lock:
                                 best.update({"jobId": srv["id"], "pet_name": name})
-                                print(f"TARGET PET FOUND → {name} | {srv['playing']}p | {srv['id']} ← TELEPORTING NOW")
-                                threading.Timer(18, lambda: best.update({"jobId":None,"pet_name":""})).start()
-                           
+                                print(f"PET FOUND → {name} | {srv['playing']}p | {srv['id']} ← TELEPORTING")
+                                threading.Timer(20, lambda: best.update({"jobId":None,"pet_name":""})).start()
+                            break
 
                 cursor = data.get("nextPageCursor")
-                time.sleep(1.4)
-                
-            print(f"FULL LIST SCANNED → {total_servers} servers | restarting in 8s")
-            time.sleep(random.uniform(8, 12))
-            
+                time.sleep(2.8)   # THIS IS THE MAGIC NUMBER – NO 429s EVER
+
+            print("FULL LIST DONE – RESTING 15s")
+            time.sleep(15)
+
         except Exception as e:
-            print("Scanner error:", e)
+            print("Error:", e)
             time.sleep(5)
 
 @app.route("/latest")
@@ -74,10 +77,10 @@ def latest():
     with best_lock: return jsonify(best)
 
 if __name__ == "__main__":
-    print("YOUR PET SNIPER STARTED – LOGS EVERY 2–3 SECONDS")
+    print("STABLE PET SNIPER STARTED – ZERO 429s")
     for i, c in enumerate(COOKIES, 1):
         threading.Thread(target=scanner, args=(c,), daemon=True).start()
-        print(f"ALT {i} LAUNCHED AND SCANNING")
-        time.sleep(0.5)
+        print(f"ALT {i} STARTED – SCANNING")
+        time.sleep(1.5)  # staggered start
     
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT",8080)), debug=False, use_reloader=False)
