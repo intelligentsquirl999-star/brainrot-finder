@@ -6,7 +6,7 @@ import requests
 import logging
 from flask import Flask, jsonify
 
-# THIS LINE KILLS ALL RED GET /latest SPAM FOREVER
+# KILL RED SPAM FOREVER
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
 app = Flask(__name__)
@@ -17,7 +17,7 @@ best = {"placeId": PLACE_ID, "jobId": None, "income": 0, "players": 0, "found_at
 
 def load_cookies():
     cookies = [v.strip() for k, v in os.environ.items() if k.startswith("COOKIE_") and v.strip()]
-    print(f"LOADED {len(cookies)} ALTS – HYPER MODE ACTIVE")
+    print(f"LOADED {len(cookies)} ALTS – FULL AGGRO MODE")
     return cookies
 
 COOKIES = load_cookies()
@@ -30,7 +30,9 @@ def scanner(cookie):
     while True:
         try:
             cursor = ""
-            scanned = 0
+            total_scanned = 0
+            start_time = time.time()
+            
             while cursor is not None:
                 r = s.get(
                     f"https://games.roblox.com/v1/games/{PLACE_ID}/servers/Public",
@@ -38,18 +40,18 @@ def scanner(cookie):
                     timeout=7
                 )
                 if r.status_code != 200:
+                    print(f"ALT {cookie[:10]}... → HTTP {r.status_code} – retrying")
                     time.sleep(1)
                     continue
                     
                 data = r.json()
                 servers = data.get("data", [])
-                scanned += len(servers)
+                total_scanned += len(servers)
                 
-                # LOG EVERY SCAN SO YOU SEE IT WORKING
+                # FORCE LOG EVERY PAGE – YOU WILL SEE THIS NON-STOP
                 good = sum(1 for x in servers if 4 <= x["playing"] <= 7)
-                if good > 0:
-                    print(f"SCANNING → {scanned} servers seen | {good} JACKPOTS (4-7p)")
-                
+                print(f"SCANNING LIVE → {total_scanned} servers | {good} good (4-7p) | ALT {cookie[:12]}...")
+
                 for srv in servers:
                     p = srv["playing"]
                     if 4 <= p <= 7:
@@ -58,18 +60,19 @@ def scanner(cookie):
                             if income > best["income"]:
                                 joining = srv["id"]
                                 best.update({"jobId": joining, "income": income, "players": p})
-                                print(f"JACKPOT LOCKED → {income//1000000}M | {p}p | {joining}")
-                                threading.Timer(14, lambda: best.update({"jobId": None, "income": 0, "players": 0})).start()
+                                print(f"JACKPOT → {income//1000000}M | {p}p | {joining} ← TELEPORT NOW")
+                                threading.Timer(12, lambda: best.update({"jobId": None, "income": 0, "players": 0})).start()
 
                 cursor = data.get("nextPageCursor")
-                time.sleep(0.35)  # MAX SPEED WITHOUT 429
+                time.sleep(0.3)  # MAXIMUM SPEED
 
-            print(f"FINISHED FULL SCAN → {scanned} servers checked – restarting in 4s")
-            time.sleep(random.uniform(4, 8))
+            elapsed = time.time() - start_time
+            print(f"FULL LIST SCANNED → {total_scanned} servers in {elapsed:.1f}s – restarting instantly")
+            time.sleep(1)  # tiny breath
 
         except Exception as e:
-            print("Scanner temp error:", e)
-            time.sleep(3)
+            print("Scanner crashed:", e)
+            time.sleep(2)
 
 @app.route("/latest")
 def latest():
@@ -77,8 +80,9 @@ def latest():
         return jsonify(best)
 
 if __name__ == "__main__":
-    print("HYPER SCANNER LIVE – YOU WILL SEE SCANNING LINES EVERY 5 SECONDS")
-    for c in COOKIES:
+    print("AGGRESSIVE SCANNER STARTED – LOGS EVERY 2–3 SECONDS")
+    for i, c in enumerate(COOKIES):
         threading.Thread(target=scanner, args=(c,), daemon=True).start()
+        print(f"ALT {i+1} STARTED")
     
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), debug=False, use_reloader=False)
