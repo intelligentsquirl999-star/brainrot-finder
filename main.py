@@ -1,36 +1,26 @@
-import os, threading, time, random, requests, logging
+import os
+import threading
+import time
+import random
+import requests
 from flask import Flask, jsonify
-
-logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
 app = Flask(__name__)
 PLACE_ID = 109983668079237
 
 best_lock = threading.Lock()
-best = {"placeId": PLACE_ID, "jobId": None, "pet_name": "", "pet_mps": 0, "found_at": None}
-
-# PETS THAT DO 17M+ PER SECOND (Steal a Brainrot — December 2025)
-GOD_PETS = {
-    "Huge Rainbow Unicorn": 25_000_000,
-    "Huge Rainbow Dragon": 28_000_000,
-    "Titanic Rainbow Dominus": 35_000_000,
-    "Huge Rainbow Phoenix": 22_000_000,
-    "Huge Rainbow Griffin": 20_000_000,
-    "Huge Rainbow Pegasus": 19_000_000,
-    "Titanic Rainbow Reaper": 40_000_000,
-    "Huge Rainbow Kraken": 30_000_000,
-    "Huge Rainbow Serpent": 27_000_000,
-    "Titanic Rainbow Corgi": 32_000_000,
-    "Huge Rainbow Axolotl": 18_000_000,
-    "Huge Rainbow Monkey": 21_000_000,
-    "Huge Rainbow Demon": 24_000_000,
-    "Huge Party Cat": 17_000_000,
-    "Huge Festive Cat": 17_500_000
-}
+best = {"placeId": PLACE_ID, "jobId": None, "income": 0, "players": 0, "found_at": None}
 
 def load_cookies():
-    cookies = [v.strip() for k, v in os.environ.items() if k.startswith("COOKIE_") and v.strip()]
-    print(f"LOADED {len(cookies)} ALTS – GOD PET SNIPER ACTIVE")
+    cookies = []
+    i = 1
+    while True:
+        c = os.environ.get(f"COOKIE_{i}")
+        if not c:
+            break
+        cookies.append(c.strip())
+        i += 1
+    print(f"LOADED {len(cookies)} ALTS – MAX 8P OPTIMIZED")
     return cookies
 
 COOKIES = load_cookies()
@@ -39,41 +29,58 @@ def scanner(cookie):
     s = requests.Session()
     s.cookies[".ROBLOSECURITY"] = cookie
     s.headers["User-Agent"] = "Roblox/WinInet"
-    
     while True:
         try:
             cursor = ""
+            page = 0
             while cursor is not None:
+                page += 1
                 r = s.get(f"https://games.roblox.com/v1/games/{PLACE_ID}/servers/Public",
-                          params={"limit": 100, "cursor": cursor}, timeout=10)
+                          params={"sortOrder": "Asc", "limit": 100, "cursor": cursor or ""}, timeout=12)
+
+                if r.status_code == 429:
+                    print("429 – sleeping 80s")
+                    time.sleep(random.uniform(80, 110))
+                    break
                 if r.status_code != 200:
-                    time.sleep(3)
-                    continue
+                    time.sleep(7)
+                    break
 
-                for srv in r.json().get("data", []):
-                    job_id = srv["id"]
-                    thumbnails = srv.get("playerThumbnails", [])
-                    
-                    for player in thumbnails:
-                        pet_name = player.get("name", "")
-                        if pet_name in GOD_PETS and GOD_PETS[pet_name] >= 17_000_000:
-                            with best_lock:
-                                best.update({
-                                    "jobId": job_id,
-                                    "pet_name": pet_name,
-                                    "pet_mps": GOD_PETS[pet_name],
-                                    "found_at": time.strftime("%H:%M:%S")
-                                })
-                                print(f"GOD PET → {pet_name} ({GOD_PETS[pet_name]//1000000}M/s) | {srv['playing']}p | {job_id} ← TELEPORT NOW")
-                                threading.Timer(18, lambda: best.update({"jobId": None, "pet_name": "", "pet_mps": 0})).start()
-                            break  # stop checking this server
+                data = r.json()
+                servers = data.get("data", [])
+                good = sum(1 for x in servers if 4 <= x["playing"] <= 7)
+                print(f"PAGE {page} – {len(servers)} servers – {good} in 4-7 range")
 
-                cursor = r.json().get("nextPageCursor")
-                time.sleep(1.7)
-            time.sleep(random.uniform(12, 18))
+                for srv in servers:
+                    p = srv["playing"]
+                    if 4 <= p <= 7:
+                        income = p * 2200000
+                        with best_lock:
+                            if income > best["income"]:
+                                joining = srv["id"]
+                                best.update({"jobId": joining, "income": income, "players": p, "found_at": time.strftime("%H:%M:%S")})
+                                print(f"JACKPOT → {income//1000000}M | {p}p | {joining}")
+                                # Reserve with ALL alts
+                                for alt_cookie in COOKIES:
+                                    try:
+                                        requests.post(f"https://games.roblox.com/v1/games/{PLACE_ID}/servers/{joining}/reserve-server",
+                                                     cookies={".ROBLOSECURITY": alt_cookie}, timeout=5)
+                                    except:
+                                        pass
+                                print(f"RESERVED {joining} with {len(COOKIES)} alts – SECURE")
+                                # Clear after 20s
+                                threading.Timer(20, lambda: best.update({"jobId": None, "income": 0, "players": 0})).start()
+
+                cursor = data.get("nextPageCursor")
+                time.sleep(1.1)
+            time.sleep(random.uniform(15, 30))
         except Exception as e:
             print("Error:", e)
-            time.sleep(5)
+            time.sleep(10)
+
+@app.route("/")
+def home():
+    return "scanner alive – max 8p mode"
 
 @app.route("/latest")
 def latest():
@@ -81,8 +88,8 @@ def latest():
         return jsonify(best)
 
 if __name__ == "__main__":
-    print("GOD PET SNIPER LIVE – ONLY 17M+ PER SECOND PETS")
+    print("MAX 8P SCANNER LIVE – 4-7P TARGETED")
     for c in COOKIES:
         threading.Thread(target=scanner, args=(c,), daemon=True).start()
-        time.sleep(0.6)
+        time.sleep(0.7)
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), debug=False, use_reloader=False)
