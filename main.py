@@ -11,65 +11,62 @@ PLACE_ID = 109983668079237
 best_lock = threading.Lock()
 best = {"placeId": PLACE_ID, "jobId": None, "income": 0, "players": 0, "found_at": None}
 
+# LOAD EVERY SINGLE ALT – NO LIMIT
 def load_cookies():
-    i, c = 1, []
-    while True:
-        cookie = os.environ.get(f"COOKIE_{i}")
-        if not cookie: break
-        c.append(cookie)
-        i += 1
-    print(f"LOADED {len(c)} ALTS – MAX 8P OPTIMIZED")
-    return c
+    cookies = []
+    for key, value in os.environ.items():
+        if key.startswith("COOKIE_") and value.strip():
+            cookies.append(value.strip())
+    print(f"LOADED {len(cookies)} ALTS SUCCESSFULLY – STARTING SEARCH NOW")
+    return cookies
 
 COOKIES = load_cookies()
+if not COOKIES:
+    print("ERROR: NO COOKIES FOUND – ADD COOKIE_1, COOKIE_2, etc.")
 
 def scanner(cookie):
     s = requests.Session()
     s.cookies[".ROBLOSECURITY"] = cookie
     s.headers["User-Agent"] = "Roblox/WinInet"
+    
     while True:
         try:
             cursor = ""
             page = 0
             while cursor is not None:
                 page += 1
-                r = s.get(f"https://games.roblox.com/v1/games/{PLACE_ID}/servers/Public",
-                          params={"sortOrder": "Asc", "limit": 100, "cursor": cursor or ""}, timeout=12)
-
-                if r.status_code == 429:
-                    print("429 – sleeping 80s")
-                    time.sleep(random.uniform(80, 110))
-                    break
+                url = f"https://games.roblox.com/v1/games/{PLACE_ID}/servers/Public"
+                params = {"sortOrder": "Asc", "limit": 100}
+                if cursor: params["cursor"] = cursor
+                
+                r = s.get(url, params=params, timeout=10)
                 if r.status_code != 200:
-                    time.sleep(7)
-                    break
-
+                    time.sleep(5)
+                    continue
+                    
                 data = r.json()
                 servers = data.get("data", [])
-                good = sum(1 for x in servers if 4 <= x["playing"] <= 7)
-                print(f"PAGE {page} – {len(servers)} servers – {good} in 4-7 range")
+                good = sum(1 for srv in servers if 4 <= srv["playing"] <= 7)
+                print(f"ALT SCANNED PAGE {page} → {len(servers)} servers | {good} good (4-7p)")
 
                 for srv in servers:
                     p = srv["playing"]
-                    if 4 <= p <= 7:  # OPTIMAL FOR MAX 8P – 8.8M to 15.4M income
+                    if 4 <= p <= 7:
                         income = p * 2200000
                         with best_lock:
                             if income > best["income"]:
                                 joining = srv["id"]
                                 best.update({"jobId": joining, "income": income, "players": p, "found_at": time.strftime("%H:%M:%S")})
-                                print(f"JACKPOT → {income//1000000}M | {p}p | {joining}")
-                                threading.Timer(20, lambda: best.update({"jobId": None, "income": 0, "players": 0})).start()
+                                print(f"★★★ JACKPOT FOUND → {income//1000000}M | {p} players | {joining}")
+                                # Auto-clear after 18s
+                                threading.Timer(18, lambda: best.update({"jobId": None, "income": 0, "players": 0})).start()
 
                 cursor = data.get("nextPageCursor")
-                time.sleep(1.1)
-            time.sleep(random.uniform(15, 30))
+                time.sleep(0.9)  # Fast scan
+            time.sleep(random.uniform(8, 15))
         except Exception as e:
-            print("Error:", e)
-            time.sleep(10)
-
-@app.route("/")
-def home():
-    return "scanner alive – max 8p mode"
+            print("Scanner error:", e)
+            time.sleep(8)
 
 @app.route("/latest")
 def latest():
@@ -77,8 +74,9 @@ def latest():
         return jsonify(best)
 
 if __name__ == "__main__":
-    print("MAX 8P SCANNER LIVE – 4-7P TARGETED")
-    for c in COOKIES:
-        threading.Thread(target=scanner, args=(c,), daemon=True).start()
-        time.sleep(0.7)
+    print("MAX 8P SCANNER FULLY ACTIVE – SEARCHING RIGHT NOW")
+    for cookie in COOKIES:
+        threading.Thread(target=scanner, args=(cookie,), daemon=True).start()
+        time.sleep(0.5)  # Instant start
+    
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), debug=False, use_reloader=False)
