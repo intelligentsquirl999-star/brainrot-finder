@@ -1,45 +1,45 @@
--- INJECT THIS ON EACH ALT (Solara/Wave) – REAL PET SNIPER
-local TARGET_PETS = {
-    "Noobini Pizzanini","La Vacca Saturno Saturno Saturnita","Bisonte Giuppitere",
-    "Karkerkar Kurkur","Los Matteos","Los Tralaleritos","Las Tralaleritas",
-    "Graipuss Medussi","La Grande Combinasion","Torrtuginni Dragonfruitini",
-    "Pot Hotspot","Las Vaquitas Saturnitas","Chicleteira Bicicleteira",
-    "Agarrini la Palini","Dragon Cannelloni","Los Combinasionas",
-    "Los Hotspotsitos","Esok Sekolah","Nuclearo Dinossauro",
-    "Sammyni Spyderini","Blackhole Goat","Dul Dul Dul"
-}
+import os, threading, time, random, requests
+from flask import Flask, jsonify
 
-local PLACE_ID = 109983668079237
+app = Flask(__name__)
+PLACE_ID = 109983668079237
 
-spawn(function()
-    while wait(3) do
-        local servers = game.HttpService:JSONDecode(game:HttpGet(
-            "https://games.roblox.com/v1/games/"..PLACE_ID.."/servers/Public?sortOrder=Asc&limit=100"
-        )).data
+best_lock = threading.Lock()
+best = {"placeId": PLACE_ID, "jobId": None, "income": 0, "players": 0}
 
-        for _, srv in pairs(servers) do
-            if srv.playing < srv.maxPlayers then
-                game:GetService("TeleportService"):TeleportToPlaceInstance(PLACE_ID, srv.id)
-                wait(8) -- wait for load
+def load_cookies():
+    cookies = [v.strip() for k,v in os.environ.items() if k.startswith("COOKIE_") and v.strip()]
+    print(f"LOADED {len(cookies)} ALTS - LOW PLAYER SNIPER")
+    return cookies
 
-                -- NOW WE CAN SEE PET NAMES
-                for _, player in pairs(game.Players:GetPlayers()) do
-                    if player ~= game.Players.LocalPlayer then
-                        for _, pet in pairs(player:FindFirstChild("PlayerGui") and player.PlayerGui:GetDescendants() or {}) do
-                            if pet:IsA("TextLabel") and table.find(TARGET_PETS, pet.Text) then
-                                game.StarterGui:SetCore("SendNotification",{
-                                    Title = "FOUND!";
-                                    Text = pet.Text.." in server!";
-                                    Duration = 10
-                                })
-                                wait(300) -- stay 5 min
-                            end
-                        end
-                    end
-                end
-                -- Leave and continue
-                game:GetService("TeleportService"):Teleport(PLACE_ID)
-            end
-        end
-    end
-end)
+COOKIES = load_cookies()
+
+def scanner(cookie):
+    s = requests.Session()
+    s.cookies[".ROBLOSECURITY"] = cookie
+    s.headers["User-Agent"] = "Roblox/WinInet"
+    while True:
+        try:
+            cursor = ""
+            while cursor is not None:
+                r = s.get(f"https://games.roblox.com/v1/games/{PLACE_ID}/servers/Public",
+                          params={"limit":100,"cursor":cursor}, timeout=10)
+                if r.status_code != 200: time.sleep(3); continue
+                for srv in r.json().get("data",[]):
+                    if 3 <= srv["playing"] <= 6:
+                        income = srv["playing"] * 2200000
+                        with best_lock:
+                            if income > best["income"]:
+                                best.update({"jobId":srv["id"],"income":income,"players":srv["playing"]})
+                                print(f"LOW PLAYER SERVER → {income//1000000}M | {srv['playing']}p | {srv['id']}")
+                cursor = r.json().get("nextPageCursor")
+                time.sleep(2.2)
+            time.sleep(15)
+        except: time.sleep(5)
+
+@app.route("/latest")
+def latest(): 
+    with best_lock: return jsonify(best)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT",8080)), debug=False, use_reloader=False)
