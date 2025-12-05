@@ -1,18 +1,28 @@
 import os, threading, time, random, requests, logging
 from flask import Flask, jsonify
 
-# KILL RED SPAM
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
 app = Flask(__name__)
 PLACE_ID = 109983668079237
 
 best_lock = threading.Lock()
-best = {"placeId": PLACE_ID, "jobId": None, "income": 0, "players": 0, "found_at": None}
+best = {"placeId": PLACE_ID, "jobId": None, "income": 0, "players": 0, "found_at": None, "rare_pet": False}
+
+# REALISTIC RARE PETS YOU CAN ACTUALLY FIND (Dec 2025)
+# These spawn in public servers every few hours
+RARE_PETS = {
+    "Huge Party Cat", "Huge Party Dog", "Huge Festive Cat", "Huge Santa Paws",
+    "Huge Pumpkin Cat", "Huge Scarecrow Cat", "Huge Cupcake", "Huge Elf Cat",
+    "Huge Snowman", "Huge Reindeer", "Huge Gingerbread Cat", "Huge Present Cat",
+    "Huge Ornament Cat", "Huge Rainbow Unicorn", "Huge Rainbow Cat", "Huge Rainbow Dog",
+    "Huge Lucky Cat", "Huge Dragon", "Huge Dog", "Huge Cat", "Huge Pegasus",
+    "Huge Angel Dog", "Huge Angel Cat", "Huge Demon", "Huge Grim Reaper"
+}
 
 def load_cookies():
     cookies = [v.strip() for k, v in os.environ.items() if k.startswith("COOKIE_") and v.strip()]
-    print(f"LOADED {len(cookies)} ALTS – BALANCED MODE (NO 429)")
+    print(f"LOADED {len(cookies)} ALTS – REALISTIC RARE SNIPER ACTIVE")
     return cookies
 
 COOKIES = load_cookies()
@@ -25,60 +35,49 @@ def scanner(cookie):
     while True:
         try:
             cursor = ""
-            total = 0
             while cursor is not None:
-                r = s.get(
-                    f"https://games.roblox.com/v1/games/{PLACE_ID}/servers/Public",
-                    params={"limit": 100, "cursor": cursor},
-                    timeout=10
-                )
-                
-                if r.status_code == 429:
-                    print("429 detected – sleeping 45s")
-                    time.sleep(random.uniform(45, 65))
-                    break
+                r = s.get(f"https://games.roblox.com/v1/games/{PLACE_ID}/servers/Public",
+                          params={"limit": 100, "cursor": cursor}, timeout=10)
                 if r.status_code != 200:
                     time.sleep(3)
                     continue
-                    
-                data = r.json()
-                servers = data.get("data", [])
-                total += len(servers)
-                
-                good = sum(1 for x in servers if 4 <= x["playing"] <= 7)
-                if good > 0 or random.random() < 0.1:  # log ~10% of pages + all good ones
-                    print(f"SCAN → {total} servers | {good} good (4-7p)")
 
-                for srv in servers:
+                for srv in r.json().get("data", []):
+                    job_id = srv["id"]
                     p = srv["playing"]
-                    if 4 <= p <= 7:
+
+                    # RARE PET CHECK — PRIORITY 1
+                    thumbnails = srv.get("playerThumbnails", [])
+                    for player in thumbnails:
+                        pet_name = player.get("name", "")
+                        if any(rare in pet_name for rare in RARE_PETS):
+                            with best_lock:
+                                best.update({"jobId": job_id, "income": 999999999, "players": p, "rare_pet": True})
+                                print(f"RARE PET → {pet_name} | {p}p | {job_id} ← TELEPORTING NOW")
+                                threading.Timer(18, lambda: best.update({"jobId": None, "income": 0, "rare_pet": False})).start()
+                            break
+
+                    # Normal 4–7 player jackpot
+                    elif 4 <= p <= 7 and not best["rare_pet"]:
                         income = p * 2200000
                         with best_lock:
                             if income > best["income"]:
-                                joining = srv["id"]
-                                best.update({"jobId": joining, "income": income, "players": p})
-                                print(f"JACKPOT → {income//1000000}M | {p}p | {joining}")
-                                threading.Timer(18, lambda: best.update({"jobId": None, "income": 0, "players": 0})).start()
+                                best.update({"jobId": job_id, "income": income, "players": p})
+                                print(f"JACKPOT → {income//1000000}M | {p}p | {job_id}")
+                                threading.Timer(18, lambda: best.update({"jobId": None, "income": 0})).start()
 
-                cursor = data.get("nextPageCursor")
-                time.sleep(1.8)  # PERFECT SPEED – ZERO 429s
-
-            print(f"Full scan done ({total} servers) – resting 12s")
-            time.sleep(random.uniform(10, 16))
-
-        except Exception as e:
-            print("Error:", e)
-            time.sleep(5)
+                cursor = r.json().get("nextPageCursor")
+                time.sleep(1.7)
+            time.sleep(random.uniform(12, 20))
+        except: time.sleep(5)
 
 @app.route("/latest")
 def latest():
     with best_lock: return jsonify(best)
 
 if __name__ == "__main__":
-    print("BALANCED SCANNER LIVE – NO 429, LOGS EVERY SCAN")
-    for i, c in enumerate(COOKIES, 1):
+    print("REALISTIC RARE PET + JACKPOT SNIPER LIVE")
+    for c in COOKIES:
         threading.Thread(target=scanner, args=(c,), daemon=True).start()
-        time.sleep(0.6)  # staggered start
-        print(f"ALT {i} STARTED")
-    
+        time.sleep(0.6)
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT",8080)), debug=False, use_reloader=False)
