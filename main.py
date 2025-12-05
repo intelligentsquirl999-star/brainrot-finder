@@ -14,7 +14,7 @@ TARGET_PETS = {
     "Torrtuginni Dragonfruitini","Pot Hotspot","Las Vaquitas Saturnitas",
     "Chicleteira Bicicleteira","Agarrini la Palini","Dragon Cannelloni",
     "Los Combinasionas","Los Hotspotsitos","Esok Sekolah","Nuclearo Dinossauro",
-    "Sammyni Spyderini","Blackhole Goat","Dul Dul Dul"
+    "Sammyni Spyderini","Blackhole Goat","Dul Dul Dul","Noobini Pizzanini"
 }
 
 def load_cookies():
